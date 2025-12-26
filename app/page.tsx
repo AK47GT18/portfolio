@@ -3,11 +3,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import NET from 'vanta/dist/vanta.net.min';
-import { motion, useScroll, useTransform, AnimatePresence, MotionValue } from 'framer-motion';
+import { motion, useScroll, useTransform, AnimatePresence, MotionValue, useInView } from 'framer-motion';
 import {
   ArrowUpRight, Github, Mail, Phone,
   Shield, Zap, Network, GitBranch,
-  Send, X, Sun, Moon
+  Send, X, Sun, Moon, MessageCircle,
 } from 'lucide-react';
 
 // --- ICONS DATA (Devicon) ---
@@ -90,12 +90,57 @@ const PROJECTS = [
   }
 ];
 
-// --- SUB-COMPONENTS ---
+// --- ANIMATION COMPONENTS ---
 
-// Fix: Extracting the animated number to its own component so Hooks work correctly
+// 1. Reveal: Triggers EVERY time it enters viewport (scrolling up or down)
+const Reveal = ({ children, delay = 0, width = "fit-content" }: { children: React.ReactNode, delay?: number, width?: "fit-content" | "100%" }) => (
+  <motion.div
+    style={{ width }}
+    initial={{ opacity: 0, y: 40, filter: "blur(4px)" }}
+    whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+    viewport={{ once: false, margin: "-10% 0px -10% 0px" }} // Triggers when element is in middle 80% of screen
+    transition={{ duration: 0.8, delay, ease: [0.25, 0.25, 0, 1] }}
+  >
+    {children}
+  </motion.div>
+);
+
+// 2. Typewriter: Types text out when it enters view (resets when scrolling away)
+const Typewriter = ({ text, delay = 0, className = "" }: { text: string, delay?: number, className?: string }) => {
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: false, amount: 0.5 }); // Triggers every time
+  const [displayedText, setDisplayedText] = useState("");
+
+  useEffect(() => {
+    let timeout: NodeJS.Timeout;
+
+    if (isInView) {
+      setDisplayedText("");
+      let currentIndex = 0;
+
+      const typeChar = () => {
+        if (currentIndex < text.length) {
+          setDisplayedText(text.slice(0, currentIndex + 1));
+          currentIndex++;
+          timeout = setTimeout(typeChar, 30 + Math.random() * 30); // Random typing speed
+        }
+      };
+
+      // Initial delay before starting
+      timeout = setTimeout(typeChar, delay * 1000);
+    } else {
+      setDisplayedText(""); // Reset text when out of view so it types again
+    }
+
+    return () => clearTimeout(timeout);
+  }, [isInView, text, delay]);
+
+  return <span ref={ref} className={className}>{displayedText}</span>;
+};
+
+// 3. Project Number Logic
 const ProjectNumber = ({ id, scrollYProgress }: { id: string, scrollYProgress: MotionValue<number> }) => {
   const y = useTransform(scrollYProgress, [0, 1], [0, 100]);
-
   return (
     <motion.span
       style={{ y }}
@@ -106,19 +151,69 @@ const ProjectNumber = ({ id, scrollYProgress }: { id: string, scrollYProgress: M
   );
 };
 
+const ProjectCard = ({ project, scrollYProgress }: { project: any, scrollYProgress: any }) => {
+  return (
+    <Reveal width="100%">
+      <div className="grid md:grid-cols-12 gap-12 border-t border-slate-200 dark:border-white/10 pt-16 relative group">
+        <ProjectNumber id={project.id} scrollYProgress={scrollYProgress} />
+
+        {/* Left: Title & Context */}
+        <div className="md:col-span-5 space-y-6">
+          <div>
+            <span className="text-sm font-mono text-blue-600 dark:text-[#38F2FF] uppercase tracking-wider">{project.role}</span>
+            <h3 className="text-4xl md:text-5xl font-bold text-slate-900 dark:text-[#E6EAF2] mt-3 mb-4">{project.title}</h3>
+            <p className="text-blue-600 dark:text-[#38F2FF] text-xl font-medium">{project.outcome}</p>
+          </div>
+          <div className="flex gap-4 pt-6">
+            <a href={project.link} target="_blank" className="px-6 py-3 border border-slate-300 dark:border-white/10 hover:bg-slate-900 hover:text-white dark:hover:bg-white dark:hover:text-black transition-all rounded-lg flex items-center gap-3 text-sm font-bold uppercase tracking-widest text-slate-700 dark:text-[#E6EAF2]">
+              View System <ArrowUpRight className="w-5 h-5" />
+            </a>
+          </div>
+        </div>
+
+        {/* Right: The Deep Dive */}
+        <div className="md:col-span-7 space-y-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+            <div>
+              <h4 className="text-sm font-mono text-slate-500 dark:text-[#9AA4BF] uppercase tracking-widest mb-4 flex items-center gap-2">
+                <Shield className="w-4 h-4" /> The Constraint
+              </h4>
+              <p className="text-lg text-slate-700 dark:text-[#E6EAF2]/90 leading-relaxed border-l-2 border-blue-600/30 dark:border-[#38F2FF]/30 pl-5">
+                {project.constraint}
+              </p>
+            </div>
+            <div>
+              <h4 className="text-sm font-mono text-slate-500 dark:text-[#9AA4BF] uppercase tracking-widest mb-4 flex items-center gap-2">
+                <GitBranch className="w-4 h-4" /> The Architecture
+              </h4>
+              <p className="text-lg text-slate-700 dark:text-[#E6EAF2]/90 leading-relaxed border-l-2 border-blue-600/30 dark:border-[#38F2FF]/30 pl-5">
+                {project.architecture}
+              </p>
+            </div>
+          </div>
+          <div className="pt-4">
+            <h4 className="text-xs font-mono text-slate-400 dark:text-[#9AA4BF] uppercase mb-4 tracking-widest">Technology Stack</h4>
+            <div className="flex flex-wrap gap-3">
+              {project.tech.map((t: string) => (
+                <span key={t} className="px-4 py-2 text-sm font-mono text-slate-600 dark:text-[#E6EAF2] bg-slate-200 dark:bg-[#12182B] rounded border border-slate-300 dark:border-white/10 flex items-center gap-2">
+                  {TECH_ICONS[t] && <img src={TECH_ICONS[t]} alt="" className="w-4 h-4" />}
+                  {t}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </Reveal>
+  );
+};
+
 const LoadingScreen = ({ onComplete }: { onComplete: () => void }) => {
   const [progress, setProgress] = useState(0);
   const [lines, setLines] = useState<string[]>([]);
 
   useEffect(() => {
-    const bootLines = [
-      "Initializing kernel...",
-      "Loading Vanta.js modules...",
-      "Decrypting portfolio data...",
-      "Optimizing assets...",
-      "System Ready."
-    ];
-
+    const bootLines = ["Initializing kernel...", "Loading Vanta.js modules...", "Decrypting portfolio data...", "System Ready."];
     let lineIndex = 0;
     const lineInterval = setInterval(() => {
       if (lineIndex < bootLines.length) {
@@ -139,10 +234,7 @@ const LoadingScreen = ({ onComplete }: { onComplete: () => void }) => {
       });
     }, 30);
 
-    return () => {
-      clearInterval(progressInterval);
-      clearInterval(lineInterval);
-    };
+    return () => { clearInterval(progressInterval); clearInterval(lineInterval); };
   }, [onComplete]);
 
   return (
@@ -152,37 +244,13 @@ const LoadingScreen = ({ onComplete }: { onComplete: () => void }) => {
       transition={{ duration: 0.8, ease: "easeInOut" }}
     >
       <div className="w-80 space-y-4">
-        <div className="flex justify-between text-xs uppercase tracking-widest">
-          <span>System Boot</span>
-          <span>{progress}%</span>
-        </div>
-        <div className="h-1 bg-[#38F2FF]/20 w-full overflow-hidden">
-          <motion.div
-            className="h-full bg-[#38F2FF]"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-        <div className="h-24 flex flex-col justify-end gap-1 overflow-hidden">
-          {lines.map((line, i) => (
-            <span key={i} className="text-[10px] text-[#9AA4BF]">{`> ${line}`}</span>
-          ))}
-        </div>
+        <div className="flex justify-between text-xs uppercase tracking-widest"><span>System Boot</span><span>{progress}%</span></div>
+        <div className="h-1 bg-[#38F2FF]/20 w-full overflow-hidden"><motion.div className="h-full bg-[#38F2FF]" style={{ width: `${progress}%` }} /></div>
+        <div className="h-24 flex flex-col justify-end gap-1 overflow-hidden">{lines.map((line, i) => <span key={i} className="text-[10px] text-[#9AA4BF]">{`> ${line}`}</span>)}</div>
       </div>
     </motion.div>
   );
 };
-
-const Reveal = ({ children, delay = 0, width = "fit-content" }: { children: React.ReactNode, delay?: number, width?: "fit-content" | "100%" }) => (
-  <motion.div
-    style={{ width }}
-    initial={{ opacity: 0, y: 30, filter: "blur(4px)" }}
-    whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-    viewport={{ once: true, margin: "-50px" }}
-    transition={{ duration: 0.8, delay, ease: "easeOut" }}
-  >
-    {children}
-  </motion.div>
-);
 
 // --- MAIN COMPONENT ---
 
@@ -197,14 +265,11 @@ export default function Portfolio() {
   const { scrollYProgress } = useScroll();
   const scaleX = useTransform(scrollYProgress, [0, 1], [0, 1]);
 
-  // Handle Theme Toggle
   const toggleTheme = () => setDarkMode(!darkMode);
 
-  // Vanta Effect with Dynamic Colors
   useEffect(() => {
     if (!loading && vantaRef.current) {
       if (vantaEffect) vantaEffect.destroy();
-
       setVantaEffect(NET({
         el: vantaRef.current,
         THREE: THREE,
@@ -213,11 +278,7 @@ export default function Portfolio() {
         scale: 1.00, scaleMobile: 1.00,
         color: darkMode ? 0x38F2FF : 0x2563EB,
         backgroundColor: darkMode ? 0x0B0F1A : 0xF0F4F8,
-        points: 9.00,
-        maxDistance: 22.00,
-        spacing: 18.00,
-        showDots: true,
-        backgroundAlpha: 1.0
+        points: 9.00, maxDistance: 22.00, spacing: 18.00, showDots: true, backgroundAlpha: 1.0
       }));
     }
     return () => { if (vantaEffect) vantaEffect.destroy(); };
@@ -238,42 +299,27 @@ export default function Portfolio() {
       {!loading && (
         <div className="relative min-h-screen bg-[#F0F4F8] dark:bg-[#0B0F1A] text-slate-800 dark:text-[#E6EAF2] font-sans selection:bg-blue-500 selection:text-white dark:selection:bg-[#38F2FF] dark:selection:text-[#0B0F1A] transition-colors duration-500 overflow-x-hidden">
 
-          {/* Scroll Progress */}
           <motion.div style={{ scaleX }} className="fixed top-0 left-0 right-0 h-[4px] bg-blue-600 dark:bg-[#38F2FF] origin-left z-[70]" />
-
-          {/* Vanta Layer */}
           <div ref={vantaRef} className="fixed inset-0 z-0 pointer-events-none opacity-30 dark:opacity-20" />
-
-          {/* Vignette (Dark Mode Only) */}
           <div className="fixed inset-0 z-0 pointer-events-none dark:bg-[radial-gradient(circle_at_center,transparent_0%,#0B0F1A_120%)] transition-all duration-500" />
 
           <div className="relative z-10">
-
             {/* --- NAVBAR --- */}
-            <nav className={`fixed top-0 w-full z-50 transition-all duration-700 ${scrolled
-              ? 'bg-white/80 dark:bg-[#0B0F1A]/95 backdrop-blur-md border-b border-slate-200 dark:border-white/5 py-4'
-              : 'py-10 bg-transparent'
-              }`}>
+            <nav className={`fixed top-0 w-full z-50 transition-all duration-700 ${scrolled ? 'bg-white/80 dark:bg-[#0B0F1A]/95 backdrop-blur-md border-b border-slate-200 dark:border-white/5 py-4' : 'py-10 bg-transparent'}`}>
               <div className="container mx-auto px-6 flex justify-between items-center">
                 <div className="font-mono text-sm tracking-[0.2em] font-bold text-slate-900 dark:text-[#E6EAF2]">
                   ARTHONY<span className="text-blue-600 dark:text-[#38F2FF]">_KANJIRA</span>
                 </div>
-
                 <div className="hidden md:flex gap-12 text-xs font-bold tracking-widest text-slate-500 dark:text-[#9AA4BF]">
                   <a href="#about" className="hover:text-blue-600 dark:hover:text-white transition-colors">ABOUT</a>
                   <a href="#skills" className="hover:text-blue-600 dark:hover:text-white transition-colors">ARSENAL</a>
                   <a href="#work" className="hover:text-blue-600 dark:hover:text-white transition-colors">SYSTEMS</a>
                 </div>
-
                 <div className="flex items-center gap-6">
                   <button onClick={toggleTheme} className="text-slate-600 dark:text-[#9AA4BF] hover:text-blue-600 dark:hover:text-white transition-colors">
                     {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                   </button>
-
-                  <button
-                    onClick={() => setChatOpen(true)}
-                    className="text-blue-600 dark:text-[#38F2FF] text-xs uppercase font-bold tracking-widest flex items-center gap-2 hover:opacity-80 transition-opacity"
-                  >
+                  <button onClick={() => setChatOpen(true)} className="text-blue-600 dark:text-[#38F2FF] text-xs uppercase font-bold tracking-widest flex items-center gap-2 hover:opacity-80 transition-opacity">
                     <div className="w-2 h-2 bg-blue-600 dark:bg-[#38F2FF] rounded-full animate-pulse" />
                     AI TERMINAL
                   </button>
@@ -290,14 +336,16 @@ export default function Portfolio() {
                   </div>
                 </Reveal>
 
-                <Reveal delay={0.1}>
+                <div className="min-h-[160px] md:min-h-[240px]">
                   <h1 className="text-5xl md:text-8xl font-bold tracking-tight leading-[1.05] mb-8 text-slate-900 dark:text-[#E6EAF2]">
-                    ENGINEERING SYSTEMS. <br />
-                    <span className="text-slate-400 dark:text-[#9AA4BF]">BUILDING INTELLIGENCE.</span>
+                    <Typewriter text="ENGINEERING SYSTEMS." delay={0.2} /> <br />
+                    <span className="text-slate-400 dark:text-[#9AA4BF]">
+                      <Typewriter text="BUILDING INTELLIGENCE." delay={1.2} />
+                    </span>
                   </h1>
-                </Reveal>
+                </div>
 
-                <Reveal delay={0.2}>
+                <Reveal delay={2.0}>
                   <div className="border-l-4 border-blue-600 dark:border-[#38F2FF] pl-8 max-w-3xl">
                     <p className="text-2xl md:text-3xl text-slate-700 dark:text-[#E6EAF2] font-light leading-relaxed">
                       I design software that survives bad data, weak networks, and real users.
@@ -305,23 +353,18 @@ export default function Portfolio() {
                   </div>
                 </Reveal>
               </div>
-
-              <motion.div
-                animate={{ opacity: [0.3, 1, 0.3] }}
-                transition={{ repeat: Infinity, duration: 3 }}
-                className="absolute bottom-12 left-6 text-slate-400 dark:text-[#9AA4BF] text-xs font-mono tracking-widest rotate-90 origin-left"
-              >
-                SCROLL TO DECRYPT
-              </motion.div>
+              <motion.div animate={{ opacity: [0.3, 1, 0.3] }} transition={{ repeat: Infinity, duration: 3 }} className="absolute bottom-12 left-6 text-slate-400 dark:text-[#9AA4BF] text-xs font-mono tracking-widest rotate-90 origin-left">SCROLL TO DECRYPT</motion.div>
             </section>
 
-            {/* --- ABOUT ME (THE OPERATOR) --- */}
+            {/* --- ABOUT ME --- */}
             <section id="about" className="py-32 px-6 border-t border-slate-200 dark:border-white/5 bg-white/50 dark:bg-[#0B0F1A]/80 backdrop-blur-sm">
               <div className="container mx-auto max-w-5xl grid md:grid-cols-12 gap-16 items-start">
                 <div className="md:col-span-4">
                   <Reveal>
                     <span className="text-blue-600 dark:text-[#38F2FF] font-mono text-sm tracking-widest uppercase mb-4 block">01 // The Operator</span>
-                    <h2 className="text-4xl font-bold text-slate-900 dark:text-[#E6EAF2]">WHO I AM</h2>
+                    <h2 className="text-4xl font-bold text-slate-900 dark:text-[#E6EAF2] h-[40px]">
+                      <Typewriter text="WHO I AM" delay={0.1} />
+                    </h2>
                   </Reveal>
                 </div>
                 <div className="md:col-span-8 space-y-8">
@@ -338,21 +381,35 @@ export default function Portfolio() {
               </div>
             </section>
 
-            {/* --- TECHNICAL ARSENAL (ICONS GRID) --- */}
+            {/* --- SKILLS --- */}
             <section id="skills" className="py-32 px-6 bg-slate-100 dark:bg-[#0E121F] transition-colors duration-500">
               <div className="container mx-auto max-w-6xl">
                 <Reveal>
                   <span className="text-blue-600 dark:text-[#38F2FF] font-mono text-sm tracking-widest uppercase mb-4 block">02 // Technical Arsenal</span>
-                  <h2 className="text-4xl font-bold text-slate-900 dark:text-[#E6EAF2] mb-16">LANGUAGES & TOOLS</h2>
+                  <h2 className="text-4xl font-bold text-slate-900 dark:text-[#E6EAF2] mb-16">
+                    <Typewriter text="LANGUAGES & TOOLS" delay={0.1} />
+                  </h2>
                 </Reveal>
 
-                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+                {/* Staggered Grid Animation */}
+                <motion.div
+                  initial="hidden"
+                  whileInView="visible"
+                  viewport={{ once: false, margin: "-10%" }}
+                  variants={{
+                    visible: { transition: { staggerChildren: 0.1 } }
+                  }}
+                  className="grid md:grid-cols-2 lg:grid-cols-4 gap-8"
+                >
                   {SKILLS.map((skillGroup, i) => (
-                    <Reveal key={i} delay={i * 0.1} width="100%">
-                      <motion.div
-                        whileHover={{ y: -5 }}
-                        className="p-8 border border-slate-200 dark:border-white/5 bg-white dark:bg-[#0B0F1A] rounded-xl hover:shadow-xl dark:hover:border-[#38F2FF]/30 transition-all h-full"
-                      >
+                    <motion.div
+                      key={i}
+                      variants={{
+                        hidden: { opacity: 0, y: 50 },
+                        visible: { opacity: 1, y: 0, transition: { duration: 0.6 } }
+                      }}
+                    >
+                      <div className="p-8 border border-slate-200 dark:border-white/5 bg-white dark:bg-[#0B0F1A] rounded-xl hover:shadow-xl dark:hover:border-[#38F2FF]/30 transition-all h-full">
                         <h3 className="text-blue-600 dark:text-[#38F2FF] font-mono text-xs uppercase tracking-widest mb-6 border-b border-slate-100 dark:border-white/5 pb-4">
                           {skillGroup.category}
                         </h3>
@@ -360,49 +417,34 @@ export default function Portfolio() {
                           {skillGroup.items.map((item, idx) => (
                             <div key={idx} className="flex flex-col items-center gap-2 group cursor-pointer">
                               {TECH_ICONS[item] ? (
-                                <div className="w-10 h-10 flex items-center justify-center transition-transform group-hover:scale-110">
-                                  <img
-                                    src={TECH_ICONS[item]}
-                                    alt={item}
-                                    className="w-full h-full object-contain filter dark:brightness-100"
-                                  />
-                                </div>
+                                <img src={TECH_ICONS[item]} alt={item} className="w-10 h-10 object-contain filter dark:brightness-100 transition-transform group-hover:scale-110" />
                               ) : (
-                                <div className="w-10 h-10 bg-slate-200 dark:bg-white/10 rounded-full flex items-center justify-center">
-                                  <span className="text-[10px] font-bold">{item[0]}</span>
-                                </div>
+                                <div className="w-10 h-10 bg-slate-200 dark:bg-white/10 rounded-full flex items-center justify-center"><span className="text-[10px] font-bold">{item[0]}</span></div>
                               )}
-                              <span className="text-[10px] font-mono uppercase text-slate-500 dark:text-[#9AA4BF] opacity-0 group-hover:opacity-100 transition-opacity absolute -bottom-4 bg-black/80 text-white px-2 py-1 rounded whitespace-nowrap z-10">
-                                {item}
-                              </span>
+                              <span className="text-[10px] font-mono uppercase text-slate-500 dark:text-[#9AA4BF] opacity-0 group-hover:opacity-100 transition-opacity absolute -bottom-4 bg-black/80 text-white px-2 py-1 rounded whitespace-nowrap z-10">{item}</span>
                             </div>
                           ))}
                         </div>
-                      </motion.div>
-                    </Reveal>
+                      </div>
+                    </motion.div>
                   ))}
-                </div>
+                </motion.div>
               </div>
             </section>
 
-            {/* --- ENGINEERING PRINCIPLES --- */}
+            {/* --- PRINCIPLES --- */}
             <section className="py-32 px-6">
               <div className="container mx-auto max-w-6xl">
                 <Reveal>
                   <h2 className="text-sm font-mono text-blue-600 dark:text-[#38F2FF] tracking-widest uppercase mb-12">Core Philosophy</h2>
                 </Reveal>
-
                 <div className="grid md:grid-cols-3 gap-12">
                   {PRINCIPLES.map((item, i) => (
                     <Reveal key={i} delay={i * 0.1}>
                       <div className="group">
-                        <div className="mb-6 p-4 bg-white dark:bg-[#12182B] w-fit rounded-lg border border-slate-200 dark:border-white/5 group-hover:border-blue-600/30 dark:group-hover:border-[#38F2FF]/30 transition-colors shadow-sm">
-                          {item.icon}
-                        </div>
+                        <div className="mb-6 p-4 bg-white dark:bg-[#12182B] w-fit rounded-lg border border-slate-200 dark:border-white/5 group-hover:border-blue-600/30 dark:group-hover:border-[#38F2FF]/30 transition-colors shadow-sm">{item.icon}</div>
                         <h3 className="text-2xl font-bold text-slate-900 dark:text-[#E6EAF2] mb-4">{item.title}</h3>
-                        <p className="text-slate-600 dark:text-[#9AA4BF] leading-relaxed text-lg">
-                          {item.desc}
-                        </p>
+                        <p className="text-slate-600 dark:text-[#9AA4BF] leading-relaxed text-lg">{item.desc}</p>
                       </div>
                     </Reveal>
                   ))}
@@ -415,68 +457,13 @@ export default function Portfolio() {
               <div className="container mx-auto max-w-6xl">
                 <Reveal>
                   <span className="text-blue-600 dark:text-[#38F2FF] font-mono text-sm tracking-widest uppercase mb-4 block">03 // Selected Works</span>
-                  <h2 className="text-4xl md:text-5xl font-bold text-slate-900 dark:text-[#E6EAF2] mb-24">SYSTEM CASE STUDIES</h2>
+                  <h2 className="text-4xl md:text-5xl font-bold text-slate-900 dark:text-[#E6EAF2] mb-24">
+                    <Typewriter text="SYSTEM CASE STUDIES" delay={0.1} />
+                  </h2>
                 </Reveal>
-
                 <div className="space-y-32">
                   {PROJECTS.map((project, index) => (
-                    <Reveal key={index} delay={0.1}>
-                      <div className="grid md:grid-cols-12 gap-12 border-t border-slate-200 dark:border-white/10 pt-16 relative group">
-
-                        {/* Parallax ID Number using new component */}
-                        <ProjectNumber id={project.id} scrollYProgress={scrollYProgress} />
-
-                        {/* Left: Title & Context */}
-                        <div className="md:col-span-5 space-y-6">
-                          <div>
-                            <span className="text-sm font-mono text-blue-600 dark:text-[#38F2FF] uppercase tracking-wider">{project.role}</span>
-                            <h3 className="text-4xl md:text-5xl font-bold text-slate-900 dark:text-[#E6EAF2] mt-3 mb-4">{project.title}</h3>
-                            <p className="text-blue-600 dark:text-[#38F2FF] text-xl font-medium">{project.outcome}</p>
-                          </div>
-
-                          <div className="flex gap-4 pt-6">
-                            <a href={project.link} target="_blank" className="px-6 py-3 border border-slate-300 dark:border-white/10 hover:bg-slate-900 hover:text-white dark:hover:bg-white dark:hover:text-black transition-all rounded-lg flex items-center gap-3 text-sm font-bold uppercase tracking-widest text-slate-700 dark:text-[#E6EAF2]">
-                              View System <ArrowUpRight className="w-5 h-5" />
-                            </a>
-                          </div>
-                        </div>
-
-                        {/* Right: The Deep Dive */}
-                        <div className="md:col-span-7 space-y-10">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                            <div>
-                              <h4 className="text-sm font-mono text-slate-500 dark:text-[#9AA4BF] uppercase tracking-widest mb-4 flex items-center gap-2">
-                                <Shield className="w-4 h-4" /> The Constraint
-                              </h4>
-                              <p className="text-lg text-slate-700 dark:text-[#E6EAF2]/90 leading-relaxed border-l-2 border-blue-600/30 dark:border-[#38F2FF]/30 pl-5">
-                                {project.constraint}
-                              </p>
-                            </div>
-                            <div>
-                              <h4 className="text-sm font-mono text-slate-500 dark:text-[#9AA4BF] uppercase tracking-widest mb-4 flex items-center gap-2">
-                                <GitBranch className="w-4 h-4" /> The Architecture
-                              </h4>
-                              <p className="text-lg text-slate-700 dark:text-[#E6EAF2]/90 leading-relaxed border-l-2 border-blue-600/30 dark:border-[#38F2FF]/30 pl-5">
-                                {project.architecture}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="pt-4">
-                            <h4 className="text-xs font-mono text-slate-400 dark:text-[#9AA4BF] uppercase mb-4 tracking-widest">Technology Stack</h4>
-                            <div className="flex flex-wrap gap-3">
-                              {project.tech.map(t => (
-                                <span key={t} className="px-4 py-2 text-sm font-mono text-slate-600 dark:text-[#E6EAF2] bg-slate-200 dark:bg-[#12182B] rounded border border-slate-300 dark:border-white/10 flex items-center gap-2">
-                                  {TECH_ICONS[t] && <img src={TECH_ICONS[t]} alt="" className="w-4 h-4" />}
-                                  {t}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-
-                      </div>
-                    </Reveal>
+                    <ProjectCard key={index} project={project} scrollYProgress={scrollYProgress} />
                   ))}
                 </div>
               </div>
@@ -487,24 +474,29 @@ export default function Portfolio() {
               <div className="container mx-auto max-w-4xl text-center relative z-10">
                 <Reveal>
                   <h2 className="text-5xl md:text-8xl font-bold tracking-tighter text-slate-900 dark:text-[#E6EAF2] mb-12">
-                    SYSTEMS READY.
+                    <Typewriter text="SYSTEMS READY." delay={0.1} />
                   </h2>
                 </Reveal>
 
-                <Reveal delay={0.2}>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-24">
-                    <a href="mailto:arthonykanjira444@gmail.com" className="group p-10 border border-slate-200 dark:border-white/5 bg-white dark:bg-[#12182B]/50 hover:shadow-2xl hover:-translate-y-1 dark:hover:bg-[#12182B] dark:hover:border-[#38F2FF]/30 transition-all rounded-xl">
-                      <Mail className="w-8 h-8 text-slate-400 dark:text-[#9AA4BF] mx-auto mb-6 group-hover:text-blue-600 dark:group-hover:text-[#38F2FF]" />
+                {/* Fixed Grid Layout for Buttons */}
+                <Reveal delay={0.2} width="100%">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-24 max-w-4xl mx-auto">
+
+                    <a href="mailto:arthonykanjira444@gmail.com" className="group flex flex-col items-center p-10 border border-slate-200 dark:border-white/5 bg-white dark:bg-[#12182B]/50 hover:shadow-2xl hover:-translate-y-1 dark:hover:bg-[#12182B] dark:hover:border-[#38F2FF]/30 transition-all rounded-xl h-full">
+                      <Mail className="w-8 h-8 text-slate-400 dark:text-[#9AA4BF] mb-6 group-hover:text-blue-600 dark:group-hover:text-[#38F2FF]" />
                       <div className="text-sm font-mono uppercase tracking-widest text-slate-500 dark:text-[#9AA4BF]">Email Link</div>
                     </a>
-                    <a href="https://github.com/AK47GT18" target="_blank" className="group p-10 border border-slate-200 dark:border-white/5 bg-white dark:bg-[#12182B]/50 hover:shadow-2xl hover:-translate-y-1 dark:hover:bg-[#12182B] dark:hover:border-[#38F2FF]/30 transition-all rounded-xl">
-                      <Github className="w-8 h-8 text-slate-400 dark:text-[#9AA4BF] mx-auto mb-6 group-hover:text-blue-600 dark:group-hover:text-[#38F2FF]" />
+
+                    <a href="https://github.com/AK47GT18" target="_blank" className="group flex flex-col items-center p-10 border border-slate-200 dark:border-white/5 bg-white dark:bg-[#12182B]/50 hover:shadow-2xl hover:-translate-y-1 dark:hover:bg-[#12182B] dark:hover:border-[#38F2FF]/30 transition-all rounded-xl h-full">
+                      <Github className="w-8 h-8 text-slate-400 dark:text-[#9AA4BF] mb-6 group-hover:text-blue-600 dark:group-hover:text-[#38F2FF]" />
                       <div className="text-sm font-mono uppercase tracking-widest text-slate-500 dark:text-[#9AA4BF]">GitHub</div>
                     </a>
-                    <a href="tel:+265885620896" className="group p-10 border border-slate-200 dark:border-white/5 bg-white dark:bg-[#12182B]/50 hover:shadow-2xl hover:-translate-y-1 dark:hover:bg-[#12182B] dark:hover:border-[#38F2FF]/30 transition-all rounded-xl">
-                      <Phone className="w-8 h-8 text-slate-400 dark:text-[#9AA4BF] mx-auto mb-6 group-hover:text-blue-600 dark:group-hover:text-[#38F2FF]" />
-                      <div className="text-sm font-mono uppercase tracking-widest text-slate-500 dark:text-[#9AA4BF]">Phone</div>
+
+                    <a href="https://wa.me/265885620896" target="_blank" className="group flex flex-col items-center p-10 border border-slate-200 dark:border-white/5 bg-white dark:bg-[#12182B]/50 hover:shadow-2xl hover:-translate-y-1 dark:hover:bg-[#12182B] dark:hover:border-[#38F2FF]/30 transition-all rounded-xl h-full">
+                      <MessageCircle className="w-8 h-8 text-slate-400 dark:text-[#9AA4BF] mb-6 group-hover:text-green-500 dark:group-hover:text-[#25D366]" />
+                      <div className="text-sm font-mono uppercase tracking-widest text-slate-500 dark:text-[#9AA4BF]">WhatsApp</div>
                     </a>
+
                   </div>
                 </Reveal>
 
@@ -530,7 +522,6 @@ export default function Portfolio() {
                   <span className="font-mono text-xs text-blue-600 dark:text-[#38F2FF] tracking-widest">TERMINAL // ASSISTANT</span>
                   <button onClick={() => setChatOpen(false)} className="text-slate-500 hover:text-red-500 dark:text-[#9AA4BF] dark:hover:text-white"><X className="w-4 h-4" /></button>
                 </div>
-
                 <div className="flex-1 p-6 font-mono text-sm overflow-y-auto">
                   <div className="mb-6">
                     <span className="text-blue-600 dark:text-[#38F2FF] mr-2">➜</span>
@@ -540,7 +531,6 @@ export default function Portfolio() {
                     Hello. I am the portfolio assistant. I can explain the <span className="text-blue-600 dark:text-[#38F2FF]">offline-first architecture</span> of the Crop Advisory System or discuss how Arthony handles <span className="text-blue-600 dark:text-[#38F2FF]">database concurrency</span> in PHP.
                   </div>
                 </div>
-
                 <div className="p-4 border-t border-slate-200 dark:border-white/10 bg-white dark:bg-[#0B0F1A]">
                   <div className="flex gap-3">
                     <span className="text-blue-600 dark:text-[#38F2FF] py-3">➜</span>
@@ -551,7 +541,6 @@ export default function Portfolio() {
               </div>
             </motion.div>
           )}
-
         </div>
       )}
     </div>
