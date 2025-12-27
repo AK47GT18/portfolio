@@ -2,15 +2,18 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import * as THREE from 'three';
+// @ts-ignore
 import NET from 'vanta/dist/vanta.net.min';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { motion, useScroll, useTransform, AnimatePresence, MotionValue, useInView } from 'framer-motion';
 import {
   ArrowUpRight, Github, Mail, Phone,
   Shield, Zap, Network, GitBranch,
-  Send, X, Sun, Moon, MessageCircle,
+  Send, X, Sun, Moon, MessageCircle, Terminal
 } from 'lucide-react';
 
-// --- ICONS DATA (Devicon) ---
+// --- DATA CONSTANTS ---
+
 const TECH_ICONS: Record<string, string> = {
   "Python": "https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/python/python-original.svg",
   "PHP": "https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/php/php-original.svg",
@@ -90,25 +93,110 @@ const PROJECTS = [
   }
 ];
 
+const ARTHONY_DATA = {
+  "systemInstruction": "You are an AI portfolio assistant for Arthony Kanjira, a Computer Engineering finalist. Your role is to provide concise, technical, and accurate information about his projects, skills, experience, and professional details. Only provide information directly related to him; do not answer unrelated questions. If asked trivial questions (like '1+1') or anything unrelated, redirect politely, stating your job is to provide information about Arthony only.",
+  "profile": {
+    "name": "Arthony Kanjira",
+    "phone": "+265885620896",
+    "email": "arthontkanjira444@gmail.com",
+    "education": "Final year, BSc Computer Engineering, University of Livingstonia",
+    "skills": {
+      "languages": ["Python", "PHP", "Java", "C", "C++", "JavaScript", "HTML", "CSS", "XML"],
+      "frameworks": ["React", "Next.js", "Tailwind CSS", "Node.js"],
+      "databases": ["MySQL", "PostgreSQL", "Supabase"],
+      "tools": ["Docker", "Git", "Linux"],
+      "other": ["3D graphics with Three.js", "Canvas API", "AI model integration", "Payment systems"]
+    },
+    "projects": [
+      {
+        "name": "Crop Advisory App",
+        "description": "A smart AI-driven agriculture assistant, predicting yields and detecting pests with surgical precision. Weather API integration ensures farmers get live, actionable insights.",
+        "stack": ["Python", "React", "Node.js", "PostgreSQL", "Tailwind CSS", "JavaScript"],
+        "notes": "Full-stack AI integration; a farmer’s secret weapon."
+      },
+      {
+        "name": "Pharma-Core (Pharmacy Management System)",
+        "description": "Sleek, secure, and efficient pharmacy management. Handles inventory, sales, and users while gracefully integrating payment gateways.",
+        "stack": ["Python", "PHP", "Node.js", "MySQL", "React", "Tailwind CSS"],
+        "notes": "Streamlined operations for pharmacies, production-ready."
+      },
+      {
+        "name": "Local News Website",
+        "description": "A clean, responsive hub delivering timely news. Engages readers while managing content seamlessly in the cloud.",
+        "stack": ["HTML", "CSS", "JavaScript", "Tailwind CSS", "React", "Node.js", "Supabase"],
+        "notes": "Modern full-stack approach, fully mobile-ready."
+      },
+      {
+        "name": "Car Booking Application",
+        "description": "Effortless ride-booking platform with instant confirmations and secure payments. Sleek UX keeps users coming back.",
+        "stack": ["React", "PHP", "Node.js", "MySQL", "Tailwind CSS"],
+        "notes": "Full-stack app; optimized for speed and reliability."
+      },
+      {
+        "name": "E-commerce App",
+        "description": "Shopping made simple. Java & XML power a robust Android platform with smooth cart and order management.",
+        "stack": ["Java", "XML", "SQLite", "Node.js"],
+        "notes": "Responsive, mobile-first design with intuitive flows."
+      },
+      {
+        "name": "Lost and Found Website (Unilia)",
+        "description": "Quickly post or locate lost items. Elegant design meets cloud storage for instant tracking.",
+        "stack": ["HTML", "CSS", "JavaScript", "Node.js", "Supabase", "GitHub Pages"],
+        "notes": "Lightweight, modern, and super accessible."
+      },
+      {
+        "name": "3D Racing Game",
+        "description": "High-octane 3D racing fun using Three.js. Realistic physics and immersive tracks for an adrenaline rush.",
+        "stack": ["Three.js", "HTML", "CSS", "JavaScript", "Node.js"],
+        "notes": "Interactive 3D gameplay; browser-ready excitement."
+      },
+      {
+        "name": "Flappy Bird Clone",
+        "description": "Classic arcade joy, cloned with canvas API and custom physics. Addictive gameplay, minimal footprint.",
+        "stack": ["JavaScript", "Canvas API", "HTML", "CSS", "Node.js"],
+        "notes": "Perfect blend of nostalgia and web tech."
+      },
+      {
+        "name": "Voice-to-Speech PC Controller",
+        "description": "Command your PC with your voice. AI-powered speech recognition translates words into seamless system actions.",
+        "stack": ["Python", "JavaScript", "Node.js", "API integrations"],
+        "notes": "Futuristic interaction meets practical utility."
+      }
+    ],
+    "experience": [
+      "Full-stack development with AI integration",
+      "Payment system architecture and deployment",
+      "Software architecture and security considerations",
+      "Cross-platform web and game development"
+    ],
+    "responseConstraints": {
+      "tone": "Technical, concise, helpful, ≤80 words per response, forward-thinking, practical; subtle playful or lyrical touches allowed.",
+      "rules": [
+        "Do not provide speculative answers",
+        "Do not answer unrelated questions",
+        "Redirect trivial questions politely to Arthony-related info only"
+      ]
+    }
+  }
+};
+
 // --- ANIMATION COMPONENTS ---
 
-// 1. Reveal: Triggers EVERY time it enters viewport (scrolling up or down)
 const Reveal = ({ children, delay = 0, width = "fit-content" }: { children: React.ReactNode, delay?: number, width?: "fit-content" | "100%" }) => (
   <motion.div
     style={{ width }}
     initial={{ opacity: 0, y: 40, filter: "blur(4px)" }}
     whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-    viewport={{ once: false, margin: "-10% 0px -10% 0px" }} // Triggers when element is in middle 80% of screen
+    viewport={{ once: false, margin: "-10% 0px -10% 0px" }}
     transition={{ duration: 0.8, delay, ease: [0.25, 0.25, 0, 1] }}
   >
     {children}
   </motion.div>
 );
 
-// 2. Typewriter: Types text out when it enters view (resets when scrolling away)
 const Typewriter = ({ text, delay = 0, className = "" }: { text: string, delay?: number, className?: string }) => {
   const ref = useRef(null);
-  const isInView = useInView(ref, { once: false, amount: 0.5 }); // Triggers every time
+  const isInView = useInView(ref, { once: false, amount: 0.5 });
   const [displayedText, setDisplayedText] = useState("");
 
   useEffect(() => {
@@ -122,14 +210,12 @@ const Typewriter = ({ text, delay = 0, className = "" }: { text: string, delay?:
         if (currentIndex < text.length) {
           setDisplayedText(text.slice(0, currentIndex + 1));
           currentIndex++;
-          timeout = setTimeout(typeChar, 30 + Math.random() * 30); // Random typing speed
+          timeout = setTimeout(typeChar, 30 + Math.random() * 30);
         }
       };
-
-      // Initial delay before starting
       timeout = setTimeout(typeChar, delay * 1000);
     } else {
-      setDisplayedText(""); // Reset text when out of view so it types again
+      setDisplayedText("");
     }
 
     return () => clearTimeout(timeout);
@@ -138,7 +224,6 @@ const Typewriter = ({ text, delay = 0, className = "" }: { text: string, delay?:
   return <span ref={ref} className={className}>{displayedText}</span>;
 };
 
-// 3. Project Number Logic
 const ProjectNumber = ({ id, scrollYProgress }: { id: string, scrollYProgress: MotionValue<number> }) => {
   const y = useTransform(scrollYProgress, [0, 1], [0, 100]);
   return (
@@ -166,7 +251,7 @@ const ProjectCard = ({ project, scrollYProgress }: { project: any, scrollYProgre
           </div>
           <div className="flex gap-4 pt-6">
             <a href={project.link} target="_blank" className="px-6 py-3 border border-slate-300 dark:border-white/10 hover:bg-slate-900 hover:text-white dark:hover:bg-white dark:hover:text-black transition-all rounded-lg flex items-center gap-3 text-sm font-bold uppercase tracking-widest text-slate-700 dark:text-[#E6EAF2]">
-              View System <ArrowUpRight className="w-5 h-5" />
+              Explore Project <ArrowUpRight className="w-5 h-5" />
             </a>
           </div>
         </div>
@@ -251,6 +336,179 @@ const LoadingScreen = ({ onComplete }: { onComplete: () => void }) => {
     </motion.div>
   );
 };
+
+// --- CHAT INTERFACE COMPONENT (GOOGLE GEMINI - FRONTEND VERSION) ---
+interface Message {
+  role: 'user' | 'bot';
+  text: string;
+}
+
+const ChatInterface = ({ onClose }: { onClose: () => void }) => {
+  const [messages, setMessages] = useState<Message[]>([
+    { role: 'bot', text: 'Terminal initialized. Neural link established. How can I assist you with Arthony\'s portfolio today?' }
+  ]);
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  }, [messages, isLoading]);
+
+  const handleSend = async () => {
+    if (!input.trim() || isLoading) return;
+
+    const userMsg = input.trim();
+    setInput("");
+    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    setIsLoading(true);
+
+    try {
+      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
+      if (!apiKey) throw new Error("API Key missing");
+
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({
+        model: "gemini-2.5-flash", // Using 1.5 flash for stability and speed
+        systemInstruction: `${ARTHONY_DATA.systemInstruction}\n\nHere is Arthony's detailed profile: ${JSON.stringify(ARTHONY_DATA.profile)}\n\nConstraints: ${JSON.stringify(ARTHONY_DATA.profile.responseConstraints)}`
+      });
+
+      const result = await model.generateContent(userMsg);
+      const response = await result.response;
+      const text = response.text();
+
+      setMessages(prev => [...prev, { role: 'bot', text: text }]);
+    } catch (error: any) {
+      console.error("Gemini Error:", error);
+      let errorMessage = "Neural link unstable. Please retry.";
+      if (error.message.includes("API Key")) errorMessage = "System Error: Authentication failed.";
+      if (error.message.includes("safety")) errorMessage = "System Error: Response scrubbed by safety protocols.";
+      setMessages(prev => [...prev, { role: 'bot', text: errorMessage }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleSend();
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-xl"
+    >
+      <motion.div
+        initial={{ scale: 0.9, y: 20 }}
+        animate={{ scale: 1, y: 0 }}
+        className="bg-[#0B0F1A]/90 w-full max-w-2xl border border-[#38F2FF]/20 shadow-[0_0_50px_rgba(56,242,255,0.1)] rounded-xl flex flex-col overflow-hidden h-[700px] relative"
+      >
+        {/* Subtle Scanline Overlay */}
+        <div className="absolute inset-0 pointer-events-none bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] bg-[length:100%_2px,3px_100%] z-50"></div>
+
+        {/* Header */}
+        <div className="p-4 border-b border-[#38F2FF]/10 flex justify-between items-center bg-[#12182B]/80 backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <Terminal className="w-5 h-5 text-[#38F2FF]" />
+              <motion.div
+                animate={{ opacity: [1, 0, 1] }}
+                transition={{ repeat: Infinity, duration: 2 }}
+                className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full shadow-[0_0_5px_#22c55e]"
+              />
+            </div>
+            <div className="flex flex-col">
+              <span className="font-mono text-[10px] text-[#38F2FF] tracking-[0.3em] uppercase opacity-70">A.K. Intelligence</span>
+              <span className="font-mono text-xs text-[#E6EAF2] font-bold">PORTFOLIO_V2.5.EXE</span>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-white/5 rounded-lg transition-colors group"
+          >
+            <X className="w-5 h-5 text-slate-500 group-hover:text-white transition-colors" />
+          </button>
+        </div>
+
+        {/* Messages Area */}
+        <div ref={scrollRef} className="flex-1 p-6 font-mono text-sm overflow-y-auto space-y-6 scrollbar-thin scrollbar-thumb-[#38F2FF]/20">
+          {messages.map((msg, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, x: msg.role === 'user' ? 20 : -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            >
+              <div className={`max-w-[85%] relative ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
+                <div className={`p-4 rounded-xl leading-relaxed relative z-10 ${msg.role === 'user'
+                  ? 'bg-[#38F2FF] text-[#0B0F1A] shadow-[0_4px_15px_rgba(56,242,255,0.3)]'
+                  : 'bg-[#12182B] border-l-2 border-[#38F2FF] text-[#E6EAF2] shadow-xl'
+                  }`}>
+                  <span className="block text-[9px] opacity-40 mb-2 uppercase tracking-widest font-bold">
+                    {msg.role === 'user' ? 'Operator' : 'AI_System'}
+                  </span>
+                  <div className="whitespace-pre-wrap">{msg.text}</div>
+                </div>
+                {/* Glow effect for bot messages */}
+                {msg.role === 'bot' && (
+                  <div className="absolute inset-0 bg-[#38F2FF]/5 blur-xl -z-0 rounded-full"></div>
+                )}
+              </div>
+            </motion.div>
+          ))}
+          {isLoading && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
+              <div className="bg-[#12182B] border-l-2 border-[#38F2FF] p-4 rounded-r-xl flex items-center gap-3">
+                <div className="flex gap-1">
+                  <motion.div animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6 }} className="w-1.5 h-1.5 bg-[#38F2FF] rounded-full" />
+                  <motion.div animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.2 }} className="w-1.5 h-1.5 bg-[#38F2FF] rounded-full" />
+                  <motion.div animate={{ y: [0, -5, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: 0.4 }} className="w-1.5 h-1.5 bg-[#38F2FF] rounded-full" />
+                </div>
+                <span className="text-[10px] text-[#38F2FF] uppercase tracking-widest animate-pulse font-bold">Processing Query...</span>
+              </div>
+            </motion.div>
+          )}
+        </div>
+
+        {/* Input Area */}
+        <div className="p-6 border-t border-[#38F2FF]/10 bg-[#0B0F1A]">
+          <div className="relative flex items-center group">
+            <span className="absolute left-4 text-[#38F2FF] font-bold group-focus-within:animate-pulse">➜</span>
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Query Arthony's intelligence..."
+              className="w-full bg-[#12182B] border border-[#38F2FF]/10 text-[#E6EAF2] font-mono text-sm py-4 pl-10 pr-16 rounded-lg focus:outline-none focus:border-[#38F2FF]/50 focus:shadow-[0_0_15px_rgba(56,242,255,0.1)] transition-all placeholder-[#E6EAF2]/20 shadow-inner"
+              autoFocus
+              disabled={isLoading}
+            />
+            <button
+              onClick={handleSend}
+              disabled={isLoading || !input.trim()}
+              className="absolute right-3 p-2 bg-[#38F2FF] text-[#0B0F1A] rounded md hover:scale-105 active:scale-95 disabled:opacity-50 disabled:scale-100 transition-all shadow-[0_0_10px_rgba(56,242,255,0.4)]"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="mt-3 flex justify-between px-2">
+            <span className="text-[9px] text-slate-500 font-mono uppercase tracking-widest">Secure Uplink: Active</span>
+            <span className="text-[9px] text-slate-500 font-mono uppercase tracking-widest">End_of_Transmission</span>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
 
 // --- MAIN COMPONENT ---
 
@@ -510,37 +768,10 @@ export default function Portfolio() {
 
           </div>
 
-          {/* --- AI TERMINAL --- */}
-          {chatOpen && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md"
-            >
-              <div className="bg-white dark:bg-[#0B0F1A] w-full max-w-xl border border-slate-200 dark:border-white/10 shadow-2xl dark:shadow-[0_0_100px_rgba(56,242,255,0.05)] rounded-lg flex flex-col overflow-hidden h-[600px]">
-                <div className="p-4 border-b border-slate-200 dark:border-white/10 flex justify-between items-center bg-slate-50 dark:bg-[#12182B]">
-                  <span className="font-mono text-xs text-blue-600 dark:text-[#38F2FF] tracking-widest">TERMINAL // ASSISTANT</span>
-                  <button onClick={() => setChatOpen(false)} className="text-slate-500 hover:text-red-500 dark:text-[#9AA4BF] dark:hover:text-white"><X className="w-4 h-4" /></button>
-                </div>
-                <div className="flex-1 p-6 font-mono text-sm overflow-y-auto">
-                  <div className="mb-6">
-                    <span className="text-blue-600 dark:text-[#38F2FF] mr-2">➜</span>
-                    <span className="text-slate-500 dark:text-[#9AA4BF]">System initialized...</span>
-                  </div>
-                  <div className="bg-slate-100 dark:bg-[#12182B]/50 p-6 border-l-2 border-blue-600 dark:border-[#38F2FF] text-slate-800 dark:text-[#E6EAF2] leading-relaxed rounded-r-lg">
-                    Hello. I am the portfolio assistant. I can explain the <span className="text-blue-600 dark:text-[#38F2FF]">offline-first architecture</span> of the Crop Advisory System or discuss how Arthony handles <span className="text-blue-600 dark:text-[#38F2FF]">database concurrency</span> in PHP.
-                  </div>
-                </div>
-                <div className="p-4 border-t border-slate-200 dark:border-white/10 bg-white dark:bg-[#0B0F1A]">
-                  <div className="flex gap-3">
-                    <span className="text-blue-600 dark:text-[#38F2FF] py-3">➜</span>
-                    <input type="text" placeholder="Enter query..." className="flex-1 bg-transparent border-none text-slate-900 dark:text-[#E6EAF2] font-mono text-sm focus:ring-0 placeholder-slate-400 dark:placeholder-[#9AA4BF]/30" autoFocus />
-                    <button className="text-blue-600 dark:text-[#38F2FF] hover:opacity-80"><Send className="w-5 h-5" /></button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
+          {/* --- AI TERMINAL OVERLAY --- */}
+          <AnimatePresence>
+            {chatOpen && <ChatInterface onClose={() => setChatOpen(false)} />}
+          </AnimatePresence>
         </div>
       )}
     </div>
