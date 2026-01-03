@@ -632,7 +632,7 @@ export default function Portfolio() {
                     </p>
                     <p className="text-lg text-slate-600 dark:text-[#9AA4BF] leading-relaxed">
                       My work sits at the intersection of <span className="text-slate-900 dark:text-[#E6EAF2] border-b border-blue-600/30 dark:border-[#38F2FF]/30">software engineering</span> and <span className="text-slate-900 dark:text-[#E6EAF2] border-b border-blue-600/30 dark:border-[#38F2FF]/30">intelligent systems</span>.
-                      Unlike developers who just focus on code syntax, I focus on the entire lifecycle of a problem—from the architecture diagram to the deployment pipeline.
+                      I take problems from whiteboard to production, handling architecture, implementation, and deployment—not just code syntax.
                     </p>
                   </Reveal>
                 </div>
